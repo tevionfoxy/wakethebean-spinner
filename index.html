@@ -12,7 +12,7 @@
     background:radial-gradient(ellipse at 50% 30%, var(--bg1), var(--bg2)); }
   canvas { display:block; width:100%; height:100%; cursor:grab; }
   canvas:active { cursor:grabbing; }
-  #ui { position:fixed; right:16px; top:50%; transform:translateY(-50%); width:210px; max-height:92vh; overflow-y:auto;
+  #ui { position:fixed; right:16px; top:50%; transform:translateY(-50%); width:210px; max-height:calc(100vh - 90px); overflow-y:auto;
     padding:14px 16px; background:var(--panel); backdrop-filter:blur(8px); border-radius:14px;
     display:flex; flex-direction:column; gap:6px; font-size:14px; }
   #ui h2 { margin:8px 0 2px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; opacity:.6; }
@@ -29,12 +29,22 @@
   .seg button.on { opacity:1; outline:2px solid var(--ink); outline-offset:2px; }
   .colors { display:flex; gap:8px; align-items:center; }
   .colors input[type=color] { flex:1; height:34px; padding:0; border:0; border-radius:8px; background:none; cursor:pointer; }
+  #follow { position:fixed; right:16px; bottom:12px; font-size:13px; opacity:.6; transition:opacity .2s; }
+  #follow:hover { opacity:1; }
+  #follow { color:inherit; text-decoration:none; }
+  #follow:hover { text-decoration:underline; }
+  #credit { position:fixed; left:16px; bottom:12px; font-size:12px; opacity:.4; transition:opacity .2s; }
+  #credit:hover { opacity:.85; }
+  #credit a { color:inherit; text-decoration:none; }
+  #credit a:hover { text-decoration:underline; }
   [hidden] { display:none !important; }
   @media (max-width:600px) { #ui { width:140px; right:8px; padding:10px; font-size:12px; } }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<a id="follow" href="https://www.twitch.tv/wakethebean" target="_blank" rel="noopener noreferrer">Follow wakethebean</a>
+<div id="credit">Music: <a href="https://www.youtube.com/watch?v=WfRkhVNIg8U" target="_blank" rel="noopener noreferrer">&ldquo;Bean Buffet&rdquo; by Scoochie Boochie</a></div>
 <div id="ui">
   <h2>Photo</h2>
   <div class="seg" id="photoSeg">
@@ -59,14 +69,20 @@
     <input id="c2" type="color" value="#f2d34f" aria-label="Colour 2" hidden>
   </div>
 
+  <h2>Music</h2>
+  <button id="music" aria-pressed="false">&#9835; Music: off</button>
+  <div class="row"><label for="vol">Volume</label><output></output></div>
+  <input id="vol" type="range" min="0" max="1" step="0.01" value="0.25">
+  <audio id="song" src="bean-buffet.mp3" loop preload="auto"></audio>
+
   <h2>Spinner</h2>
   <div class="row"><label for="twist">Twist</label><output></output></div>
-  <input id="twist" type="range" min="0" max="4" step="0.01" value="0.8">
+  <input id="twist" type="range" min="0" max="1" step="0.01" value="0.8">
   <div class="row"><label for="taper">Pinch</label><output></output></div>
-  <input id="taper" type="range" min="0" max="0.9" step="0.01" value="0.55">
+  <input id="taper" type="range" min="0" max="0.9" step="0.01" value="0.15">
   <div class="row"><label for="speed">Spin</label><output></output></div>
-  <input id="speed" type="range" min="-3" max="3" step="0.05" value="1">
-  <div class="stack"><button id="flat">Show flat photo</button><button id="go">Spiral again</button></div>
+  <input id="speed" type="range" min="-3" max="3" step="0.05" value="0.5">
+  <div class="stack"><button id="flat">Show flat photo</button><button id="go">Spiral again</button><button id="reset">Reset</button></div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -199,7 +215,8 @@ function pose(tw, tp, sp) {
 }
 const animateTo = (tw, spd) => { tween = {t0: performance.now(), from: {tw: +twist.value, sp: spin}, tw, spd}; };
 $('flat').onclick = () => animateTo(0, 0);
-$('go').onclick = () => animateTo(0.8, 1);
+$('go').onclick = () => animateTo(0.8, 0.5);
+$('reset').onclick = () => { tween = null; show('twist', 0.8); show('taper', 0.15); show('speed', 0.5); dragX = 0; dragY = 0; };
 
 canvas.addEventListener('pointerdown', e => { dragging = true; px = e.clientX; py = e.clientY; canvas.setPointerCapture(e.pointerId); });
 canvas.addEventListener('pointerup', () => dragging = false);
@@ -226,7 +243,7 @@ function frame(now) {
       const target = Math.round(tween.from.sp / (2 * Math.PI)) * 2 * Math.PI;
       spin = tween.from.sp + (target - tween.from.sp) * e; spd = 0;
     }
-    if (k >= 1) { show('speed', tween.spd === 0 ? 0 : (+speed.value === 0 ? 1 : +speed.value)); tween = null; }
+    if (k >= 1) { show('speed', tween.spd === 0 ? 0 : (+speed.value === 0 ? 0.5 : +speed.value)); tween = null; }
   }
   spin += spd * dt;
   pose(+twist.value, +taper.value, spin);
@@ -235,6 +252,29 @@ function frame(now) {
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
+// ---- music ----
+const song = $('song'), musicBtn = $('music');
+const vol = bind('vol'); song.volume = +vol.value;
+vol.addEventListener('input', () => song.volume = +vol.value);
+function setMusicUI(on) { musicBtn.setAttribute('aria-pressed', on); musicBtn.textContent = '♫ Music: ' + (on ? 'on' : 'off'); }
+let userChose = false;
+musicBtn.onclick = () => {
+  userChose = true;
+  if (song.paused) song.play().then(() => setMusicUI(true)).catch(() => setMusicUI(false));
+  else { song.pause(); setMusicUI(false); }
+};
+// Music is on by default. Browsers block sound until the visitor interacts,
+// so try now and, if blocked, start on the first click/tap/key press.
+function startMusic() { if (userChose || !song.paused) return; song.play().then(() => setMusicUI(true)).catch(() => {}); }
+song.play().then(() => setMusicUI(true)).catch(() => {
+  const kick = e => {
+    if (e.target.closest && e.target.closest('#music')) return;   // the button handles itself
+    removeEventListener('pointerdown', kick); removeEventListener('keydown', kick);
+    startMusic();
+  };
+  addEventListener('pointerdown', kick); addEventListener('keydown', kick);
+});
+
 loadPhoto(PHOTOS.face);
 requestAnimationFrame(frame);
 </script>
