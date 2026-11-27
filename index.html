@@ -12,23 +12,24 @@
     background:radial-gradient(ellipse at 50% 30%, var(--bg1), var(--bg2)); }
   canvas { display:block; width:100%; height:100%; cursor:grab; }
   canvas:active { cursor:grabbing; }
-  #ui { position:fixed; right:16px; top:50%; transform:translateY(-50%); width:210px; max-height:calc(100vh - 90px); overflow-y:auto;
-    padding:14px 16px; background:var(--panel); backdrop-filter:blur(8px); border-radius:14px;
-    display:flex; flex-direction:column; gap:6px; font-size:14px; }
-  #ui h2 { margin:8px 0 2px; font-size:11px; letter-spacing:.08em; text-transform:uppercase; opacity:.6; }
+  #ui { position:fixed; right:16px; top:50%; transform:translateY(-50%); transform-origin:right center; width:200px;
+    padding:10px 12px; background:var(--panel); backdrop-filter:blur(8px); border-radius:14px;
+    display:flex; flex-direction:column; gap:4px; font-size:13px; }
+  #ui h2 { margin:6px 0 0; font-size:10px; letter-spacing:.08em; text-transform:uppercase; opacity:.6; }
   #ui h2:first-child { margin-top:0; }
   #ui .row { display:grid; grid-template-columns:1fr auto; align-items:center; }
   #ui label { font-weight:600; }
   #ui output { font-variant-numeric:tabular-nums; opacity:.7; text-align:right; }
-  #ui input[type=range] { width:100%; margin:0 0 6px; }
-  .seg, .stack { display:flex; gap:6px; }
-  .stack { flex-direction:column; }
+  #ui input[type=range] { width:100%; margin:0 0 2px; height:16px; }
+  .seg { display:flex; gap:6px; }
+  .stack { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:2px; }
   button, select { padding:8px; border:0; border-radius:8px; background:var(--ink); color:var(--bg1); font:inherit; cursor:pointer; }
+  #ui button, #ui select { padding:6px 4px; font-size:12px; }
   select { width:100%; }
-  .seg button { flex:1; padding:8px 4px; opacity:.5; font-size:13px; }
-  .seg button.on { opacity:1; outline:2px solid var(--ink); outline-offset:2px; }
+  .seg button { flex:1; opacity:.5; }
+  .seg button.on { opacity:1; outline:2px solid var(--ink); outline-offset:1px; }
   .colors { display:flex; gap:8px; align-items:center; }
-  .colors input[type=color] { flex:1; height:34px; padding:0; border:0; border-radius:8px; background:none; cursor:pointer; }
+  .colors input[type=color] { flex:1; height:28px; padding:0; border:0; border-radius:8px; background:none; cursor:pointer; }
   #intro { position:fixed; inset:0; z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:18px; text-align:center; background:radial-gradient(ellipse at 50% 30%, var(--bg1), var(--bg2)); transition:opacity .6s, transform .6s; }
   #intro.leaving { opacity:0; transform:scale(1.06); pointer-events:none; }
@@ -61,7 +62,7 @@
   #credit a { color:inherit; text-decoration:none; }
   #credit a:hover { text-decoration:underline; }
   [hidden] { display:none !important; }
-  @media (max-width:600px) { #ui { width:140px; right:8px; padding:10px; font-size:12px; } }
+  @media (max-width:600px) { #ui { width:170px; right:8px; } }
 </style>
 </head>
 <body>
@@ -106,7 +107,7 @@
   <input id="taper" type="range" min="0" max="0.9" step="0.01" value="0.15">
   <div class="row"><label for="speed">Spin</label><output></output></div>
   <input id="speed" type="range" min="-3" max="3" step="0.05" value="0.5">
-  <div class="stack"><button id="flat">Show flat photo</button><button id="go">Spiral again</button><button id="reset">Reset</button></div>
+  <div class="stack"><button id="flat">Flat photo</button><button id="go">Spiral again</button><button id="reset">Reset</button><button id="fs" aria-pressed="false">&#9974; Fullscreen</button></div>
 </div>
 <div id="intro">
   <div id="beans" aria-hidden="true"></div>
@@ -163,10 +164,33 @@ function paintBackground() {
   }
   g.drawImage(curImg, 0, 0, cv.width, cv.height);
   for (const m of rods) m.userData.tex.needsUpdate = true;
+  pix = g.getImageData(0, 0, cv.width, cv.height);
+  updateCaps(+$('taper').value);
+}
+
+// Rod tips take the colour of the picture right at the end of their row, and disappear
+// where that spot is see-through, so a transparent background really is transparent.
+let pix = null, capTaper = -1;
+function updateCaps(tp) {
+  if (!pix) return;
+  capTaper = tp;
+  const w = pix.width, h = pix.height, d = pix.data;
+  for (const m of rods) {
+    const t = m.userData.t, r = 1 - tp * (1 - t * t), off = (1 - r) / 2;
+    const y = Math.min(h - 1, Math.floor((m.userData.row + 0.5) / N * h));
+    const set = (mat, x) => {
+      x = Math.max(0, Math.min(w - 1, x));
+      const i = (y * w + x) * 4;
+      mat.visible = d[i + 3] >= 128;
+      mat.color.setRGB(d[i] / 255, d[i + 1] / 255, d[i + 2] / 255);
+    };
+    set(m.userData.capL, Math.round(off * w) + 1);
+    set(m.userData.capR, Math.round((off + r) * w) - 2);
+  }
 }
 
 function clearRods() {
-  for (const m of rods) { pivot.remove(m); m.userData.tex.dispose(); m.material.dispose(); }
+  for (const m of rods) { pivot.remove(m); m.userData.tex.dispose(); new Set(m.material).forEach(x => x.dispose()); }
   if (rods[0]) rods[0].geometry.dispose();
   rods = [];
 }
@@ -188,9 +212,11 @@ function setImage(img) {
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.repeat.y = 1 / N;
     tex.offset.y = 1 - (i + 1) / N;
-    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({map:tex, alphaTest:0.5}));
+    const side = new THREE.MeshLambertMaterial({map:tex, alphaTest:0.5});
+    const capR = new THREE.MeshLambertMaterial({color:0xffffff}), capL = new THREE.MeshLambertMaterial({color:0xffffff});
+    const mesh = new THREE.Mesh(geo, [capR, capL, side, side, side, side]);   // +x, -x, +y, -y, +z, -z
     mesh.position.y = H / 2 - rowH * (i + 0.5);
-    mesh.userData = {t: 1 - 2 * (i + 0.5) / N, tex};
+    mesh.userData = {t: 1 - 2 * (i + 0.5) / N, tex, row: i, capR, capL};
     pivot.add(mesh); rods.push(mesh);
   }
   string.position.y = H / 2 + 1.1;
@@ -232,9 +258,11 @@ function syncBgUI() {
 $('bgStyle').onchange = syncBgUI;
 $('c1').oninput = $('c2').oninput = paintBackground;
 
+let vx = 0, vy = 0, lastMove = 0;   // drag momentum
 let spin = 0, last = performance.now(), dragX = 0, dragY = 0, dragging = false, px = 0, py = 0, tween = null;
 
 function pose(tw, tp, sp) {
+  if (tp !== capTaper) updateCaps(tp);
   for (const m of rods) {
     const t = m.userData.t, r = 1 - tp * (1 - t * t);
     m.rotation.y = sp + tw * Math.PI * t;
@@ -246,13 +274,53 @@ function pose(tw, tp, sp) {
 const animateTo = (tw, spd) => { tween = {t0: performance.now(), from: {tw: +twist.value, sp: spin}, tw, spd}; };
 $('flat').onclick = () => animateTo(0, 0);
 $('go').onclick = () => animateTo(0.8, 0.5);
-$('reset').onclick = () => { tween = null; show('twist', 0.8); show('taper', 0.15); show('speed', 0.5); dragX = 0; dragY = 0; };
+// ---- keep the controls panel fully visible without scrolling ----
+const uiPanel = $('ui');
+function fitPanel() {
+  uiPanel.style.transform = 'translateY(-50%)';
+  const avail = innerHeight - 70, need = uiPanel.offsetHeight;
+  const k = Math.max(0.55, Math.min(1, avail / need));
+  uiPanel.style.transform = 'translateY(-50%) scale(' + k.toFixed(3) + ')';
+}
+addEventListener('resize', fitPanel);
+new ResizeObserver(fitPanel).observe(uiPanel);
+fitPanel();
 
-canvas.addEventListener('pointerdown', e => { dragging = true; px = e.clientX; py = e.clientY; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointerup', () => dragging = false);
-canvas.addEventListener('pointermove', e => { if (!dragging) return;
-  dragX += (e.clientX - px) * 0.008; dragY = Math.max(-0.6, Math.min(0.6, dragY + (e.clientY - py) * 0.004));
-  px = e.clientX; py = e.clientY; });
+// ---- fullscreen toggle ----
+const fsBtn = $('fs'), root = document.documentElement;
+const canFS = !!(root.requestFullscreen || root.webkitRequestFullscreen);
+if (!canFS) fsBtn.hidden = true;            // e.g. iPhone Safari has no fullscreen API
+const inFS = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+function syncFS() { const on = inFS(); fsBtn.setAttribute('aria-pressed', on); fsBtn.textContent = on ? '⛶ Exit' : '⛶ Fullscreen'; }
+fsBtn.onclick = () => {
+  if (inFS()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  else { const r = (root.requestFullscreen || root.webkitRequestFullscreen).call(root); if (r && r.catch) r.catch(() => {}); }
+};
+document.addEventListener('fullscreenchange', syncFS);
+document.addEventListener('webkitfullscreenchange', syncFS);
+syncFS();
+$('reset').onclick = () => { tween = null; show('twist', 0.8); show('taper', 0.15); show('speed', 0.5); dragX = 0; dragY = 0; vx = 0; vy = 0; };
+
+canvas.addEventListener('pointerdown', e => {
+  dragging = true; vx = vy = 0; px = e.clientX; py = e.clientY; lastMove = e.timeStamp;
+  canvas.setPointerCapture(e.pointerId);
+});
+const release = e => {
+  if (!dragging) return;
+  dragging = false;
+  if (e.timeStamp - lastMove > 90) vx = vy = 0;          // paused before letting go: no fling
+};
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  const dx = (e.clientX - px) * 0.008, dy = (e.clientY - py) * 0.004;
+  const dt = Math.max(0.004, (e.timeStamp - lastMove) / 1000);
+  dragX += dx; dragY = Math.max(-0.6, Math.min(0.6, dragY + dy));
+  vx += (dx / dt - vx) * 0.5; vy += (dy / dt - vy) * 0.5;   // smoothed release velocity (rad/s)
+  vx = Math.max(-14, Math.min(14, vx)); vy = Math.max(-3, Math.min(3, vy));
+  px = e.clientX; py = e.clientY; lastMove = e.timeStamp;
+});
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -279,6 +347,11 @@ function frame(now) {
   }
   spin += spd * dt;
   pose(+twist.value, +taper.value, spin);
+  if (!dragging) {                                   // momentum: keep going, then ease to a stop
+    dragX += vx * dt; dragY = Math.max(-0.6, Math.min(0.6, dragY + vy * dt));
+    vx *= Math.exp(-1.6 * dt); vy *= Math.exp(-4 * dt);
+    if (Math.abs(vx) < 0.001) vx = 0; if (Math.abs(vy) < 0.001) vy = 0;
+  }
   pivot.rotation.y = dragX; pivot.rotation.x = dragY;
   pivot.position.y = Math.sin(now / 1400) * 0.04;
   renderer.render(scene, camera);
