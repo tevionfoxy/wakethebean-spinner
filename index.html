@@ -62,7 +62,15 @@
   #credit a { color:inherit; text-decoration:none; }
   #credit a:hover { text-decoration:underline; }
   [hidden] { display:none !important; }
-  @media (max-width:600px) { #ui { width:170px; right:8px; } }
+  @media (max-width:600px) { #ui { width:170px; right:8px; --r:8px; } }
+  #ui { --r:16px; transition:translate .28s ease; }
+  #ui.closed { translate:calc(100% * var(--k, 1) + var(--r)) 0; }
+  #uiToggle { position:absolute; left:-30px; top:50%; margin-top:-24px; width:30px; height:48px; padding:0 !important;
+    border-radius:10px 0 0 10px !important; background:var(--panel) !important; color:var(--ink) !important;
+    backdrop-filter:blur(8px); font-size:20px !important; line-height:1; }
+  #uiToggle span { display:inline-block; transition:transform .28s ease; }
+  #ui.closed #uiToggle span { transform:rotate(180deg); }
+  @media (prefers-reduced-motion: reduce) { #ui, #uiToggle span { transition:none; } }
 </style>
 </head>
 <body>
@@ -71,6 +79,7 @@
 <a id="follow" href="https://www.twitch.tv/wakethebean" target="_blank" rel="noopener noreferrer">Follow wakethebean</a>
 <div id="credit">Music: <a href="https://www.youtube.com/watch?v=WfRkhVNIg8U" target="_blank" rel="noopener noreferrer">&ldquo;Bean Buffet&rdquo; by Scoochie Boochie</a></div>
 <div id="ui">
+  <button id="uiToggle" type="button" aria-label="Hide controls" aria-expanded="true" aria-controls="ui"><span>&rsaquo;</span></button>
   <h2>Photo</h2>
   <div class="seg" id="photoSeg">
     <button data-photo="face" class="on">Face</button>
@@ -281,10 +290,18 @@ function fitPanel() {
   const avail = innerHeight - 70, need = uiPanel.offsetHeight;
   const k = Math.max(0.55, Math.min(1, avail / need));
   uiPanel.style.transform = 'translateY(-50%) scale(' + k.toFixed(3) + ')';
+  uiPanel.style.setProperty('--k', k.toFixed(3));
 }
 addEventListener('resize', fitPanel);
 new ResizeObserver(fitPanel).observe(uiPanel);
 fitPanel();
+// ---- collapse / expand the controls panel ----
+const uiToggle = $('uiToggle');
+uiToggle.onclick = () => {
+  const closed = uiPanel.classList.toggle('closed');
+  uiToggle.setAttribute('aria-expanded', String(!closed));
+  uiToggle.setAttribute('aria-label', closed ? 'Show controls' : 'Hide controls');
+};
 
 // ---- fullscreen toggle ----
 const fsBtn = $('fs'), root = document.documentElement;
