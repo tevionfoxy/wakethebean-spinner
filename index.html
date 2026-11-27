@@ -208,6 +208,7 @@ function setImage(img) {
   curImg = img;
   const aspect = img.width / img.height;
   W = Math.min(5.2, 4.3 * aspect); H = W / aspect;
+  if (typeof resize === 'function') resize();
   const k = Math.min(1, 1024 / Math.max(img.width, img.height));
   cv = document.createElement('canvas');
   cv.width = Math.max(2, Math.round(img.width * k)); cv.height = Math.max(2, Math.round(img.height * k));
@@ -297,6 +298,7 @@ new ResizeObserver(fitPanel).observe(uiPanel);
 fitPanel();
 // ---- collapse / expand the controls panel ----
 const uiToggle = $('uiToggle');
+if (innerWidth <= 600) { uiPanel.classList.add('closed'); uiToggle.setAttribute('aria-expanded', 'false'); uiToggle.setAttribute('aria-label', 'Show controls'); }
 uiToggle.onclick = () => {
   const closed = uiPanel.classList.toggle('closed');
   uiToggle.setAttribute('aria-expanded', String(!closed));
@@ -343,7 +345,10 @@ function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
-  camera.position.z = w / h < 0.9 ? 12 : 8.5;
+  // keep the whole spinner (width W, height H) in view on any screen shape
+  const t = Math.tan(17.5 * Math.PI / 180);
+  const zW = (W * 1.2) / (2 * t * (w / h)), zH = (H * 1.35) / (2 * t);
+  camera.position.z = Math.max(8.5, zW, zH);
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize); resize();
